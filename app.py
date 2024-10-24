@@ -51,31 +51,37 @@ def gerar_classificatoria(formulario_df):
     
     return filtrado_df
 
-# Função para salvar o arquivo com a escola centralizada na linha 1
-def salvar_excel(classificatoria_df):
+# Função para salvar o arquivo com escolas separadas em diferentes sheets
+def salvar_excel_separado_por_escola(classificatoria_df):
     # Nome do arquivo a ser gerado
-    output_path = "classificatoria_gerada.xlsx"
+    output_path = "classificatoria_por_escola.xlsx"
     
-    # Usando o XlsxWriter para personalizar a saída
+    # Usando o XlsxWriter para personalizar a saída com múltiplas planilhas
     with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
-        # Escreve o DataFrame no Excel a partir da linha 2
-        classificatoria_df.to_excel(writer, sheet_name='Classificatória', index=False, startrow=1)
+        # Separar por escolas
+        escolas = classificatoria_df['Escola'].unique()
         
-        # Acessar o workbook e worksheet
-        workbook  = writer.book
-        worksheet = writer.sheets['Classificatória']
-        
-        # Obter o nome da escola (da primeira linha da coluna 'Escola')
-        nome_escola = classificatoria_df['Escola'].iloc[0]
-        
-        # Mesclar as células na primeira linha e centralizar o nome da escola
-        worksheet.merge_range('A1:G1', nome_escola, workbook.add_format({'align': 'center', 'bold': True}))
+        for escola in escolas:
+            # Tratar valores nulos na coluna "Escola" e garantir que a string não ultrapasse 31 caracteres
+            escola = str(escola)[:31] if pd.notna(escola) else "ESCOLA_DESCONHECIDA"
+            
+            # Filtrar os dados para cada escola
+            df_escola = classificatoria_df[classificatoria_df['Escola'] == escola]
+            
+            # Adiciona a aba (sheet) para cada escola
+            df_escola.to_excel(writer, sheet_name=escola, index=False, startrow=1)  # Escreve a partir da linha 2
+            
+            # Acessar o worksheet da escola atual
+            worksheet = writer.sheets[escola]
+            
+            # Mesclar as células na primeira linha e centralizar o nome da escola
+            worksheet.merge_range('A1:G1', escola, writer.book.add_format({'align': 'center', 'bold': True}))
     
     return output_path
 
 # Função principal do aplicativo Streamlit
 def main():
-    st.title("Gerador de Classificatória")
+    st.title("Gerador de Classificatória por Escola")
     
     # Upload do arquivo formulário de resposta
     uploaded_file = st.file_uploader("Envie o arquivo do Formulário de Resposta", type=["xlsx", "xls"])
@@ -92,16 +98,16 @@ def main():
         st.dataframe(classificatoria_df)
         
         # Botão para baixar o arquivo classificatória gerado
-        if st.button("Baixar arquivo Classificatória"):
-            # Salvando o arquivo com a escola centralizada na linha 1
-            output_path = salvar_excel(classificatoria_df)
+        if st.button("Gerar o arquivo Classificatória"):
+            # Salvando o arquivo com cada escola em sua própria aba (sheet)
+            output_path = salvar_excel_separado_por_escola(classificatoria_df)
             
             # Gerando o botão de download
             with open(output_path, "rb") as file:
                 st.download_button(
                     label="Baixar Classificatória",
                     data=file,
-                    file_name="classificatoria_gerada.xlsx",
+                    file_name="classificatoria_por_escola.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
