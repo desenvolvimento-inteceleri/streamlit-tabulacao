@@ -23,20 +23,16 @@ def padronizar_pontuacao(pontuacao):
 
 # Função para gerar um valor de ordenação baseado na coluna "Ano"
 def obter_ordem_ano(ano):
-    # Regex para identificar anos numéricos (ex.: "2ª ano", "3º ano", etc.)
     match_ano = re.match(r'(\d+)[ªº]?\s*ano', str(ano).lower())
     if match_ano:
-        return int(match_ano.group(1))  # Retorna o ano como número (ex.: 2 para "2ª ano")
-    
-    # Regex para identificar etapas EJAI (ex.: "EJAI 1ª etapa", "EJAI 2ª etapa")
+        return int(match_ano.group(1))
     match_ejai = re.match(r'ejai\s*(\d+)[ªº]?\s*etapa', str(ano).lower())
     if match_ejai:
-        return 100 + int(match_ejai.group(1))  # Adiciona 100 para ordenar as etapas EJAI após os anos
-    
-    return float('inf')  # Coloca valores desconhecidos no final
+        return 100 + int(match_ejai.group(1))
+    return float('inf')
 
 # Função para filtrar e ordenar o formulário de resposta
-def gerar_classificatoria(formulario_df):
+def gerar_classificatoria(formulario_df, etapa):
     colunas_selecionadas = [
         'Nome do aluno?',
         'Qual é o nome da sua escola?',
@@ -57,44 +53,51 @@ def gerar_classificatoria(formulario_df):
         'Ano',
         'Pontuação',
         'Tempo',
-        'Se for aluno com deficiência/transtorno:'
+        'Deficiência/Transtorno'
     ]
     
     filtrado_df['Nome'] = filtrado_df['Nome'].str.upper()
     filtrado_df['Escola'] = filtrado_df['Escola'].apply(padronizar_nome_escola)
     filtrado_df['Pontuação'] = filtrado_df['Pontuação'].apply(padronizar_pontuacao)
-    
-    # Adiciona uma coluna de ordenação de anos baseada na função obter_ordem_ano
     filtrado_df['Ordem_Ano'] = filtrado_df['Ano'].apply(obter_ordem_ano)
-    
-    # Ordenar o DataFrame
     filtrado_df = filtrado_df.sort_values(by=['Ordem_Ano', 'Pontuação', 'Tempo'], ascending=[True, False, True])
-    
-    # Remover a coluna auxiliar de ordenação
     filtrado_df = filtrado_df.drop(columns=['Ordem_Ano'])
     
-    # Criar uma coluna extra chamada ETAPA
-    filtrado_df['ETAPA'] = '2° CLASSIFICATÓRIA'
-    filtrado_df = filtrado_df[['Ano', 'Nome', 'Escola', 'Pontuação', 'Tempo', 'Se for aluno com deficiência/transtorno:', 'ETAPA']]
+    filtrado_df['ETAPA'] = etapa
+    filtrado_df = filtrado_df[['Ano', 'Nome', 'Escola', 'Pontuação', 'Tempo', 'Deficiência/Transtorno', 'ETAPA']]
     
     return filtrado_df
 
-# Função para salvar o arquivo com escolas separadas em diferentes sheets
-def salvar_excel_separado_por_escola(classificatoria_df):
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        escolas = classificatoria_df['Escola'].unique()
-        
+# Função para salvar arquivos Excel separados por categoria de deficiência
+def salvar_excel_por_categoria(classificatoria_df):
+    output_olimpiada = BytesIO()
+    output_paralimpiada = BytesIO()
+    
+    # Dados para Alunos Olimpíada
+    olimpiada_df = classificatoria_df[classificatoria_df['Deficiência/Transtorno'] == "Não possui deficiência/transtorno"]
+    with pd.ExcelWriter(output_olimpiada, engine='xlsxwriter') as writer:
+        escolas = olimpiada_df['Escola'].unique()
         for escola in escolas:
             escola_sheet_name = escola[:31] if pd.notna(escola) and escola != "" else "ESCOLA_DESCONHECIDA"
-            df_escola = classificatoria_df[classificatoria_df['Escola'] == escola]
+            df_escola = olimpiada_df[olimpiada_df['Escola'] == escola]
             df_escola.to_excel(writer, sheet_name=escola_sheet_name, index=False, startrow=1)
-            
             worksheet = writer.sheets[escola_sheet_name]
             worksheet.merge_range('A1:G1', escola, writer.book.add_format({'align': 'center', 'bold': True}))
     
-    output.seek(0)
-    return output
+    # Dados para Alunos Paralimpíada
+    paralimpiada_df = classificatoria_df[classificatoria_df['Deficiência/Transtorno'] != "Não possui deficiência/transtorno"]
+    with pd.ExcelWriter(output_paralimpiada, engine='xlsxwriter') as writer:
+        escolas = paralimpiada_df['Escola'].unique()
+        for escola in escolas:
+            escola_sheet_name = escola[:31] if pd.notna(escola) and escola != "" else "ESCOLA_DESCONHECIDA"
+            df_escola = paralimpiada_df[paralimpiada_df['Escola'] == escola]
+            df_escola.to_excel(writer, sheet_name=escola_sheet_name, index=False, startrow=1)
+            worksheet = writer.sheets[escola_sheet_name]
+            worksheet.merge_range('A1:G1', escola, writer.book.add_format({'align': 'center', 'bold': True}))
+    
+    output_olimpiada.seek(0)
+    output_paralimpiada.seek(0)
+    return output_olimpiada, output_paralimpiada
 
 # Função principal do aplicativo Streamlit
 def main():
@@ -103,17 +106,31 @@ def main():
     
     if uploaded_file is not None:
         formulario_df = pd.read_excel(uploaded_file)
-        classificatoria_df = gerar_classificatoria(formulario_df)
         
+        # Seleção da Etapa
+        etapa_selecionada = st.selectbox("Selecione a Etapa", ["1° CLASSIFICATÓRIA", "2° CLASSIFICATÓRIA", "OUTROS"])
+        if etapa_selecionada == "OUTROS":
+            etapa_customizada = st.text_input("Digite o nome da Etapa")
+            etapa = etapa_customizada if etapa_customizada else "OUTROS"
+        else:
+            etapa = etapa_selecionada
+        
+        classificatoria_df = gerar_classificatoria(formulario_df, etapa)
         st.write("Dados filtrados e ordenados para o arquivo classificatória:")
         st.dataframe(classificatoria_df)
         
-        if st.button("Gerar o arquivo Classificatória"):
-            output = salvar_excel_separado_por_escola(classificatoria_df)
+        if st.button("Gerar Arquivos"):
+            output_olimpiada, output_paralimpiada = salvar_excel_por_categoria(classificatoria_df)
             st.download_button(
-                label="Baixar Classificatória",
-                data=output,
-                file_name="classificatoria_por_escola.xlsx",
+                label="Baixar Alunos Olimpíada",
+                data=output_olimpiada,
+                file_name="classificatoria_olimpiada.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            st.download_button(
+                label="Baixar Alunos Paralimpíada",
+                data=output_paralimpiada,
+                file_name="classificatoria_paralimpiada.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
