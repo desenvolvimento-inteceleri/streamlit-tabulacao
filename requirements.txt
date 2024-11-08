@@ -1,6 +1,6 @@
 #executar localmente =  pip install -r requirements.txt
 
-Python==3.12.3
+#Python==3.12.3
 pandas==2.2.2
 seaborn #pip install seaborn
 matplotlib==3.9.0
