@@ -11,9 +11,7 @@ def carregar_e_ordenar_dados_por_sheet(df, etapa):
     # Adicionar coluna para identificar a fase
     df['Etapa'] = etapa
     
-    # Ordenar por Ano, Pontuação (decrescente), Tempo (crescente) e Etapa
-    df = df.sort_values(by=["Ano", "Pontuação", "Tempo", "Etapa"], ascending=[True, False, True, True])
-    
+    # Retorna o DataFrame sem ordenação aqui para realizar a ordenação final após concatenação
     return df
 
 # Função principal do aplicativo
@@ -43,6 +41,9 @@ def main():
                     
                     # Concatenar as duas etapas
                     df_total = pd.concat([df1, df2], ignore_index=True)
+                    
+                    # Ordenar por Ano, Pontuação (descendente), Tempo (ascendente), e Etapa
+                    df_total = df_total.sort_values(by=["Ano", "Pontuação", "Tempo", "Etapa"], ascending=[True, False, True, True])
                     
                     # Escreve o nome da escola como cabeçalho e a tabela ordenada para cada aba
                     df_total.to_excel(writer, sheet_name=sheet_name, index=False, startrow=1)
