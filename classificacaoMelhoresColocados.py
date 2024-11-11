@@ -1,5 +1,3 @@
-#upload da planilha de tabulacao e ele vai classificar os melhores colocados (o usuario especifica o número/qtd)
-
 import streamlit as st
 import pandas as pd
 from io import BytesIO
@@ -36,54 +34,57 @@ def main():
         # Seleção do número de melhores alunos por ano para exibir
         top_n = st.selectbox("Escolha o número de melhores alunos por ano para exibir", [1, 2, 3, 4, 5])
         
-        # Botão para gerar classificação
-        if st.button("Gerar Classificação para Todas as Abas"):
-            output = BytesIO()
-            total_counts = pd.Series(dtype=int)  # Série para armazenar a contagem total de cada ano escolar
-            
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                # Itera sobre cada aba e aplica a filtragem
-                for sheet_name, df in all_sheets.items():
-                    try:
-                        # Extrai o nome da escola da primeira linha
-                        nome_escola = sheet_name  # Define o nome da aba como o nome da escola
-                        
-                        # Filtra os melhores alunos
-                        top_alunos_df = filtrar_melhores_alunos(df, top_n)
-                        
-                        # Atualiza a contagem total de alunos por ano
-                        total_counts = total_counts.add(top_alunos_df['Ano'].value_counts(), fill_value=0)
-                        
-                        # Salva o DataFrame na aba com o nome da escola na primeira linha
-                        top_alunos_df.to_excel(writer, sheet_name=sheet_name, index=False, startrow=1)
-                        
-                    except KeyError as e:
-                        st.error(f"Erro na aba {sheet_name}: Coluna {str(e)} não encontrada.")
-            
-            # Mover o ponteiro para o início do buffer
-            output.seek(0)
-            
-            # Botão para download do arquivo Excel gerado
-            st.download_button(
-                label="Baixar Classificação dos Melhores Alunos",
-                data=output,
-                file_name="melhores_alunos_classificados.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-            
-            # Exibir gráfico de quantidade de alunos por unidade organizacional (Org Unit Path) interativo
-            st.write("Quantidade total de alunos por Org Unit Path:")
-            total_counts = total_counts.sort_index()  # Ordena os anos para o gráfico
-            fig = px.bar(total_counts, x=total_counts.index, y=total_counts.values,
-                         labels={'x': 'Ano', 'y': 'Quantidade'},
-                         title="Quantidade por Ano")
-            st.plotly_chart(fig)
+        # Processamento dos dados e criação do arquivo Excel para download
+        output = BytesIO()
+        total_counts = pd.Series(dtype=int)  # Série para armazenar a contagem total de cada ano escolar
+        
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            # Itera sobre cada aba e aplica a filtragem
+            for sheet_name, df in all_sheets.items():
+                try:
+                    # Extrai o nome da escola da aba atual
+                    nome_escola = sheet_name
+                    
+                    # Filtra os melhores alunos
+                    top_alunos_df = filtrar_melhores_alunos(df, top_n)
+                    
+                    # Atualiza a contagem total de alunos por ano
+                    total_counts = total_counts.add(top_alunos_df['Ano'].value_counts(), fill_value=0)
+                    
+                    # Insere o nome da escola como a primeira linha (cabeçalho)
+                    top_alunos_df.to_excel(writer, sheet_name=sheet_name, index=False, startrow=1)
+                    
+                    # Adiciona o nome da escola na primeira linha com formatação
+                    worksheet = writer.sheets[sheet_name]
+                    format_center_bold = writer.book.add_format({'align': 'center', 'bold': True})
+                    worksheet.merge_range('A1:G1', nome_escola, format_center_bold)
+                    
+                except KeyError as e:
+                    st.error(f"Erro na aba {sheet_name}: Coluna {str(e)} não encontrada.")
+        
+        # Mover o ponteiro para o início do buffer
+        output.seek(0)
+        
+        # Botão para download do arquivo Excel gerado
+        st.download_button(
+            label="Baixar Classificação dos Melhores Alunos",
+            data=output,
+            file_name="melhores_alunos_classificados.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+        # Exibir gráfico de quantidade de alunos por unidade organizacional (Org Unit Path) interativo
+        st.write("Quantidade total de alunos por Org Unit Path:")
+        total_counts = total_counts.sort_index()  # Ordena os anos para o gráfico
+        fig = px.bar(total_counts, x=total_counts.index, y=total_counts.values,
+                     labels={'x': 'Ano', 'y': 'Quantidade'},
+                     title="Quantidade por Ano")
+        st.plotly_chart(fig)
 
-            # Exibir a tabela de contagem de alunos por ano
-            st.write("Tabela de Quantidade de Alunos por Ano:")
-            table_data = pd.DataFrame({'Ano': total_counts.index, 'Quantidade': total_counts.values})
-            st.dataframe(table_data)
+        # Exibir a tabela de contagem de alunos por ano
+        st.write("Tabela de Quantidade de Alunos por Ano:")
+        table_data = pd.DataFrame({'Ano': total_counts.index, 'Quantidade': total_counts.values})
+        st.dataframe(table_data)
 
 if __name__ == '__main__':
     main()
-
