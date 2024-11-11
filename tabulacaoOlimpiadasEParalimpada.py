@@ -1,4 +1,4 @@
-#tabulacao do pedagogico
+#tabulacao olimpiada e paralimpiada
 #pega o formulario de respota enviado pelos professores
 #separa sheets por escola, e classifica dos maiores pontos no menor tempo
 #retorna 2 arquivos: para a olimpiadas e para paralimpiada

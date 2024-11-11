@@ -8,6 +8,10 @@ from final import main as final_main
 
 
 # Configuração da página
+#st.set_page_config(
+#    page_title="Título do Seu Aplicativo", 
+#    page_icon="📚"
+#)
 
 
 # Inicialização ou reinicialização da tela inicial
