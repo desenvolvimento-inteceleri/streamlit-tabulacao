@@ -4,36 +4,80 @@
 # - Largura automática de colunas
 # - Cabeçalho estilizado (fundo verde, fonte branca)
 # - AutoFilter e Freeze Panes
+# Tabulação Olimpíada e Paralimpíada
+# Gera 3 arquivos (Olimpíada, Paralimpíada e JUNÇÃO)
+# Cada arquivo possui a aba "GERAL" + abas por escola, com:
+# - Largura automática de colunas
+# - Cabeçalho estilizado (fundo verde, fonte branca)
+# - AutoFilter e Freeze Panes
 import streamlit as st
 import pandas as pd
 import xlsxwriter
 from io import BytesIO
 import re
+import numpy as np
 
 # --- Utilitários de padronização/ordenação ---
 def padronizar_nome_escola(nome):
     if not isinstance(nome, str):
         return ""
+    # remove E.M.E.F. / EMEF etc.
     nome = re.sub(r'\b[Ee]\s*\.?\s*[Mm]\s*\.?\s*[Ee]\s*\.?\s*[Ff]\s*\.?\s*\b', '', nome)
     nome = re.sub(r'\s+', ' ', nome)
     return nome.strip().upper()
 
 def padronizar_pontuacao(pontuacao):
+    # aceita "50", "50 pts", etc.
     if isinstance(pontuacao, str):
         pontuacao = re.sub(r'[^\d]', '', pontuacao)
     try:
         return int(pontuacao)
-    except ValueError:
-        return 0
+    except Exception:
+        try:
+            return int(float(pontuacao))
+        except Exception:
+            return 0
+
+def _parse_tempo(x):
+    """Converte 'hh:mm:ss', 'mm:ss' ou 'ss' (str ou num) para segundos (float)."""
+    if pd.isna(x):
+        return np.nan
+    s = str(x).strip()
+    # já numérico -> segundos
+    if re.fullmatch(r"\d+(\.\d+)?", s):
+        try:
+            return float(s)
+        except:
+            return np.nan
+    parts = s.split(":")
+    try:
+        parts = [float(p) for p in parts]
+    except:
+        return np.nan
+    if len(parts) == 3:
+        h, m, s = parts
+        return h*3600 + m*60 + s
+    if len(parts) == 2:
+        m, s = parts
+        return m*60 + s
+    if len(parts) == 1:
+        return parts[0]
+    return np.nan
 
 def obter_ordem_ano(ano):
+    """Extrai número do ano; aceita 1º/1ª/1° ANO. EJAI* vai para 100+etapa."""
     s = str(ano).lower()
-    m = re.match(r'(\d+)[ªº]?\s*ano', s)
+    # aceita º, ª e ° (degree)
+    m = re.match(r'(\d+)[ªº°]?\s*ano', s)
     if m:
         return int(m.group(1))
-    m2 = re.match(r'ejai\s*(\d+)[ªº]?\s*etapa', s)
+    m2 = re.match(r'ejai\s*(\d+)[ªº°]?\s*etapa', s)
     if m2:
         return 100 + int(m2.group(1))
+    # fallback: tenta extrair número qualquer
+    m3 = re.search(r'(\d+)', s)
+    if m3:
+        return int(m3.group(1))
     return float('inf')
 
 def ajustar_nome_aba(nome, usados):
@@ -62,7 +106,7 @@ def aplicar_formatacao_basica(writer, sheet_name, df, header_row_idx=0):
         'bold': True,
         'align': 'center',
         'valign': 'vcenter',
-        'bg_color': '#6AA84F',   # verde (pode ajustar)
+        'bg_color': '#6AA84F',   # verde
         'font_color': 'white',
         'border': 1
     })
@@ -71,7 +115,7 @@ def aplicar_formatacao_basica(writer, sheet_name, df, header_row_idx=0):
     for col_idx, col_name in enumerate(df.columns):
         ws.write(header_row_idx, col_idx, col_name, header_fmt)
 
-    # Largura automática: máximo entre nome da coluna e dados (como string)
+    # Largura automática
     for col_idx, col_name in enumerate(df.columns):
         series_as_str = df[col_name].astype(str)
         max_len_data = series_as_str.map(len).max() if len(series_as_str) > 0 else 0
@@ -81,16 +125,18 @@ def aplicar_formatacao_basica(writer, sheet_name, df, header_row_idx=0):
 
 # --- Pipeline principal de filtragem/ordenação ---
 def gerar_classificatoria(formulario_df, etapa):
+    # mapeia variações comuns para os nomes que o fluxo usa
     colunas_mapeamento = {
         'Nome do aluno?': 'Nome do aluno?',
         'Selecione o nome da sua escola': 'Qual é o nome da sua escola?',
         'Caso a escola não esteja na lista acima, escreva o nome aqui:': 'Escreva o nome da escola caso ela no esteja listada',
         'Ano escolar do aluno:': 'Ano escolar do aluno:',
         'Total de pontuação ?': 'Total de pontuação?',
+        'Total de pontuação?': 'Total de pontuação?',
         'Quanto tempo de realização?': 'Quanto tempo de realização?',
         'Se for aluno com deficiência/transtorno:': 'Se for aluno com deficiência/transtorno:'
     }
-    formulario_df.rename(columns=colunas_mapeamento, inplace=True)
+    formulario_df = formulario_df.rename(columns=colunas_mapeamento).copy()
 
     cols = [
         'Nome do aluno?',
@@ -101,24 +147,46 @@ def gerar_classificatoria(formulario_df, etapa):
         'Quanto tempo de realização?',
         'Se for aluno com deficiência/transtorno:'
     ]
+
+    # valida e informa caso falte algo (evita KeyError mudo)
+    faltando = [c for c in cols if c not in formulario_df.columns]
+    if faltando:
+        raise KeyError(f"Colunas ausentes: {faltando}. Recebidas: {list(formulario_df.columns)}")
+
     filtrado_df = formulario_df[cols].copy()
-    mask_out = filtrado_df['Qual é o nome da sua escola?'] == "Escola não está na lista"
+
+    # trata "Escola não está na lista" (variações)
+    escola_raw = filtrado_df['Qual é o nome da sua escola?'].astype(str).str.strip().str.lower()
+    marcadores_out = {
+        'escola não está na lista', 'escola nao esta na lista', 'escola nao está na lista',
+        'outros', 'outro'
+    }
+    mask_out = escola_raw.isin(marcadores_out)
     filtrado_df.loc[mask_out, 'Qual é o nome da sua escola?'] = filtrado_df['Escreva o nome da escola caso ela no esteja listada']
+
+    # remove a coluna auxiliar
     filtrado_df.drop(columns=['Escreva o nome da escola caso ela no esteja listada'], inplace=True)
 
-    filtrado_df.columns = ['Ano', 'Nome', 'Escola', 'Pontuação', 'Tempo', 'Deficiência/Transtorno']  # <- reorganizamos ao renomear?
-    # Atenção: a ordem acima precisa refletir corretamente. Vamos corrigir:
+    # renomeia para nomes finais na ordem correta
     filtrado_df.columns = ['Nome', 'Escola', 'Ano', 'Pontuação', 'Tempo', 'Deficiência/Transtorno']
 
-    filtrado_df['Nome'] = filtrado_df['Nome'].str.upper()
+    # normalizações
+    filtrado_df['Nome'] = filtrado_df['Nome'].astype(str).str.upper()
     filtrado_df['Escola'] = filtrado_df['Escola'].apply(padronizar_nome_escola)
     filtrado_df['Pontuação'] = filtrado_df['Pontuação'].apply(padronizar_pontuacao)
-    filtrado_df['Ordem_Ano'] = filtrado_df['Ano'].apply(obter_ordem_ano)
 
-    filtrado_df.sort_values(by=['Ordem_Ano', 'Pontuação', 'Tempo'], ascending=[True, False, True], inplace=True)
+    # Tempo -> segundos para ordenar corretamente (menor é melhor)
+    filtrado_df['Tempo_seg'] = filtrado_df['Tempo'].apply(_parse_tempo)
+
+    # Ordenação por ano lógico, depois pontuação desc, depois tempo asc
+    filtrado_df['Ordem_Ano'] = filtrado_df['Ano'].apply(obter_ordem_ano)
+    filtrado_df.sort_values(by=['Ordem_Ano', 'Pontuação', 'Tempo_seg'], ascending=[True, False, True], inplace=True)
+
+    # limpeza
     filtrado_df.drop(columns=['Ordem_Ano'], inplace=True)
     filtrado_df['ETAPA'] = etapa
-    filtrado_df = filtrado_df[['Ano', 'Nome', 'Escola', 'Pontuação', 'Tempo', 'Deficiência/Transtorno', 'ETAPA']]
+    # mantém Tempo_seg para debug; será removida nos Excel finais
+    filtrado_df = filtrado_df[['Ano', 'Nome', 'Escola', 'Pontuação', 'Tempo', 'Deficiência/Transtorno', 'ETAPA', 'Tempo_seg']]
     return filtrado_df
 
 # --- Escrita em Excel ---
@@ -161,22 +229,39 @@ def salvar_excels(classificatoria_df):
     output_paralimpiada = BytesIO()
     output_juncao = BytesIO()
 
+    # normaliza campo de deficiência/transtorno para comparação robusta
+    def _norm(s):
+        return str(s).strip().lower()
+
+    sem_def_flags = {
+        'não possui deficiência/transtorno',
+        'nao possui deficiencia/transtorno',
+        'sem deficiência',
+        'sem deficiencia',
+        'nao', 'não', 'n'
+    }
+
+    base = classificatoria_df.copy()
+    base['__def_norm'] = base['Deficiência/Transtorno'].map(_norm)
+
+    olimpiada_df = base[base['__def_norm'].isin(sem_def_flags)].drop(columns=['__def_norm', 'Tempo_seg'], errors='ignore')
+    paralimpiada_df = base[~base.index.isin(olimpiada_df.index)].drop(columns=['__def_norm', 'Tempo_seg'], errors='ignore')
+    juncao_df = base.drop(columns=['__def_norm', 'Tempo_seg'], errors='ignore')
+
     # 1) Olimpíada
-    olimpiada_df = classificatoria_df[classificatoria_df['Deficiência/Transtorno'] == "Não possui deficiência/transtorno"]
     with pd.ExcelWriter(output_olimpiada, engine='xlsxwriter') as writer:
         escrever_geral(writer, olimpiada_df)
         escrever_por_escola(writer, olimpiada_df)
 
     # 2) Paralimpíada
-    paralimpiada_df = classificatoria_df[classificatoria_df['Deficiência/Transtorno'] != "Não possui deficiência/transtorno"]
     with pd.ExcelWriter(output_paralimpiada, engine='xlsxwriter') as writer:
         escrever_geral(writer, paralimpiada_df)
         escrever_por_escola(writer, paralimpiada_df)
 
     # 3) JUNÇÃO (todos)
     with pd.ExcelWriter(output_juncao, engine='xlsxwriter') as writer:
-        escrever_geral(writer, classificatoria_df)
-        escrever_por_escola(writer, classificatoria_df)
+        escrever_geral(writer, juncao_df)
+        escrever_por_escola(writer, juncao_df)
 
     output_olimpiada.seek(0)
     output_paralimpiada.seek(0)
@@ -210,7 +295,12 @@ def main():
         etapa_sel = st.selectbox("Selecione a Etapa", ["1° CLASSIFICATÓRIA", "2° CLASSIFICATÓRIA", "OUTROS"])
         etapa = st.text_input("Digite o nome da Etapa") if etapa_sel == "OUTROS" else etapa_sel
 
-        classificatoria_df = gerar_classificatoria(formulario_df, etapa)
+        try:
+            classificatoria_df = gerar_classificatoria(formulario_df, etapa)
+        except KeyError as e:
+            st.error(f"Planilha não está no formato esperado: {e}")
+            return
+
         st.write("Dados filtrados e ordenados:")
         st.dataframe(classificatoria_df)
 
