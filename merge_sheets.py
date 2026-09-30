@@ -50,7 +50,7 @@ def main():
             data.columns = colunas_desejadas
 
             # Converter todos os dados para maiúsculas
-            data = data.applymap(lambda x: x.upper() if isinstance(x, str) else x)
+            data = data.map(lambda x: x.upper() if isinstance(x, str) else x)
 
             # Concatenar a sheet ao DataFrame principal
             all_data = pd.concat([all_data, data], ignore_index=True)
