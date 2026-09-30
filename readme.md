@@ -70,26 +70,60 @@ Abaixo estão as funcionalidades disponíveis na aplicação:
 
 ### Final
 
-- **Descrição**: [Funcionalidade em desenvolvimento]
-- **Objetivo**: Esta opção será destinada à geração dos dados finais para a última etapa da competição.
+- **Descrição**: Processa a listagem de respostas do formulário da etapa final e seleciona os melhores alunos de cada ano escolar de cada escola.
+- **Recursos**:
+  - Seleciona os **2 melhores alunos de cada ano escolar, de cada escola** (a quantidade pode ser alterada na tela).
+  - Critérios de classificação: **maior pontuação** e, em caso de empate, **menor tempo de realização**.
+  - Organiza a listagem pela ordem dos anos escolares (1º ano → 2º ano → 3º ano → ...).
+  - Inclui a coluna **PROFESSOR** (professor que acompanhou o aluno), além do **RESPONSÁVEL**.
+  - Normaliza os tempos digitados em formatos diferentes (ex.: `00:11: 52`, `00:14;00`, `02.41.60`) para `HH:MM:SS`.
+  - Quando o mesmo aluno é enviado mais de uma vez (mesmo nome, escola e ano), mantém apenas o envio mais recente.
+  - Mostra avisos para conferência manual: alunos repetidos, tempos fora do padrão e empates exatos no limite da classificação.
+  - Logo do cliente opcional no topo de todas as abas, com altura e número de linhas ajustáveis (mesmo recurso da Tabulação Olimpíada e Paralimpíada).
+- **Download**: Arquivo Excel no padrão da semifinal, com a aba **GERAL** (todos os classificados) e uma aba para cada escola.
+- **Estrutura de Dados Necessária** (colunas do formulário):
+  - Nome do aluno
+  - Nome da escola onde você atua (ou o campo "Escreva o nome da escola caso ela não esteja listada")
+  - Ano escolar do aluno
+  - Quantos pontos o aluno fez?
+  - Quanto tempo de realização?
+  - Se for aluno com deficiência/transtorno
+  - Qual o nome do professor que acompanhou o aluno durante a olimpíada?
+  - Escreva o nome do responsável
 
 ## Requisitos
 
-Este projeto requer **Python 3.12.3** e as seguintes bibliotecas para ser executado corretamente:
+Este projeto requer **Python 3.13** e as seguintes bibliotecas para ser executado corretamente:
 
-- **pandas==2.2.2**
-- **seaborn** (para visualizações estatísticas, pode ser instalado com `pip install seaborn`)
-- **matplotlib==3.9.0**
-- **streamlit==1.34.0**
-- **plotly==5.22.0**
-- **openpyxl==3.1.2** (para leitura e escrita de arquivos Excel)
-- **xlsxwriter==3.2.0** (para gerar arquivos Excel com múltiplas abas)
+- **pandas==3.0.6**
+- **seaborn==0.13.2** (para visualizações estatísticas)
+- **matplotlib==3.11.2**
+- **streamlit==1.64.0**
+- **plotly==7.1.0**
+- **openpyxl==3.1.5** (para leitura e escrita de arquivos Excel)
+- **xlsxwriter==3.2.9** (para gerar arquivos Excel com múltiplas abas)
 
 Para instalar todas as dependências necessárias, execute o seguinte comando:
 
 ```bash
 pip install -r requirements.txt
 ```
+
+## Como executar
+
+Na pasta do projeto, execute:
+
+```bash
+streamlit run app.py
+```
+
+Se o comando `streamlit` não for reconhecido, use:
+
+```bash
+python -m streamlit run app.py
+```
+
+A aplicação abre no navegador em `http://localhost:8501`.
 
 ## 📝 Desenvolvido por
 <table>
