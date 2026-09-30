@@ -80,6 +80,7 @@ Abaixo estão as funcionalidades disponíveis na aplicação:
   - Quando o mesmo aluno é enviado mais de uma vez (mesmo nome, escola e ano), mantém apenas o envio mais recente.
   - Mostra avisos para conferência manual: alunos repetidos, tempos fora do padrão e empates exatos no limite da classificação.
   - Logo do cliente opcional no topo de todas as abas, com altura e número de linhas ajustáveis (mesmo recurso da Tabulação Olimpíada e Paralimpíada).
+  - Abaixo do botão de download, exibe um gráfico com a quantidade de alunos por ano escolar e os **Dados de participantes**: total de cada categoria de Deficiência/Transtorno (TEA, não possui, em avaliação etc.) e uma tabela por ano com totais. É possível escolher se os dados consideram todos os participantes ou apenas os classificados.
 - **Download**: Arquivo Excel no padrão da semifinal, com a aba **GERAL** (todos os classificados) e uma aba para cada escola.
 - **Estrutura de Dados Necessária** (colunas do formulário):
   - Nome do aluno

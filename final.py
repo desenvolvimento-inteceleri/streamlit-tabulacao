@@ -6,6 +6,7 @@
 import re
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 from io import BytesIO
 from tabulacaoOlimpiadasEParalimpada import inserir_banner
 
@@ -262,6 +263,49 @@ def main():
         file_name='classificacao_final.xlsx',
         mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
+
+    mostrar_graficos(tabela, selecionados)
+
+
+# Rótulos dos anos na ordem escolar (1º ano, 2º ano, ...)
+def anos_em_ordem(df):
+    return df.sort_values('Ordem ano')['Ano'].drop_duplicates().tolist()
+
+
+# Gráfico de alunos por ano e resumo de Deficiência/Transtorno
+def mostrar_graficos(tabela, selecionados):
+    st.divider()
+    base = st.radio('Base dos gráficos', ['Todos os participantes', 'Classificados na final'], horizontal=True)
+    df = tabela if base == 'Todos os participantes' else selecionados
+    anos = anos_em_ordem(df)
+
+    # Quantidade de alunos por ano escolar
+    st.subheader('Alunos por ano escolar')
+    por_ano = df['Ano'].value_counts().reindex(anos)
+    fig = px.bar(x=por_ano.index, y=por_ano.values, text=por_ano.values,
+                 labels={'x': 'Ano escolar', 'y': 'Quantidade de alunos'})
+    fig.update_traces(marker_color='#2a78d6', textposition='outside', cliponaxis=False,
+                      hovertemplate='%{x}: %{y} alunos<extra></extra>')
+    fig.update_layout(bargap=0.4, margin=dict(t=30))
+    st.plotly_chart(fig, key='grafico_por_ano')
+
+    # Deficiência/Transtorno: grafias diferentes ("BAIXA VISÃO" e "Baixa visão") contam juntas
+    st.subheader('Dados de participantes')
+    categoria = df['Deficiência/Transtorno'].replace('', 'Não informado')
+    chave = categoria.str.upper()
+    nome_exibido = categoria.groupby(chave).agg(lambda nomes: nomes.mode().iloc[0])
+    categoria = chave.map(nome_exibido)
+
+    totais = categoria.value_counts()
+    colunas = st.columns(min(len(totais), 5))
+    for i, (nome, qtd) in enumerate(totais.items()):
+        colunas[i % len(colunas)].metric(nome, int(qtd))
+
+    por_ano_categoria = pd.crosstab(df['Ano'], categoria, margins=True, margins_name='Total')
+    por_ano_categoria = por_ano_categoria.reindex(anos + ['Total'])[list(totais.index) + ['Total']]
+    por_ano_categoria.index.name = 'Ano'
+    por_ano_categoria.columns.name = None
+    st.dataframe(por_ano_categoria)
 
 
 if __name__ == '__main__':
